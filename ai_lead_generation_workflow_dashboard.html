@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Lead Generation - n8n Workflow Editor & Execution Engine</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        n8n: {
+                            dark: '#111318',
+                            darker: '#0b0c10',
+                            card: '#1a1d24',
+                            border: '#2a2f3a',
+                            orange: '#ff6d5a',
+                            orangeHover: '#e55b48',
+                            purple: '#9d75ff',
+                            green: '#32cd32',
+                            blue: '#3b82f6',
+                            yellow: '#f59e0b'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b0c10;
+            color: #e2e8f0;
+            overflow: hidden;
+            user-select: none;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111318;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2a2f3a;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3b4252;
+        }
+        .canvas-grid {
+            background-image: radial-gradient(circle, #2a2f3a 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 0 0 rgba(255, 109, 90, 0.7); }
+            70% { box-shadow: 0 0 0 14px rgba(255, 109, 90, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 109, 90, 0); }
+        }
+        .executing-node {
+            animation: pulseGlow 1.2s infinite;
+            border-color: #ff6d5a !important;
+            transform: scale(1.03);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between bg-[#0b0c10] text-slate-200">
+
+    <!-- Top Navigation Bar -->
+    <header class="h-14 bg-[#111318] border-b border-[#2a2f3a] flex items-center justify-between px-4 z-30 select-none shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-2 text-slate-400 text-sm">
+                <span class="hover:text-white cursor-pointer transition flex items-center gap-1.5"><i class="fa-solid fa-user-circle text-base"></i> Personal</span>
+                <span>/</span>
+                <span class="text-white font-medium flex items-center gap-1.5"><i class="fa-solid fa-bolt text-[#ff6d5a]"></i> AI lead generation</span>
+            </div>
+            <button onclick="openRenameModal()" class="text-slate-500 hover:text-slate-300 transition text-xs" title="Workflow settings"><i class="fa-solid fa-ellipsis"></i></button>
+        </div>
+
+        <div class="flex bg-[#1a1d24] p-1 rounded-lg border border-[#2a2f3a] text-xs font-medium">
+            <button onclick="switchTab('editor')" id="tab-editor" class="px-4 py-1.5 rounded-md bg-[#2a2f3a] text-white transition shadow-sm">Editor</button>
+            <button onclick="switchTab('executions')" id="tab-executions" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-white transition">Executions</button>
+            <button onclick="switchTab('evaluations')" id="tab-evaluations" class="px-4 py-1.5 rounded-md text-slate-400 hover:text-white transition">Evaluations</button>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <button onclick="toggleShareModal()" class="text-xs bg-[#1a1d24] hover:bg-[#2a2f3a] border border-[#2a2f3a] px-3 py-1.5 rounded-lg text-slate-300 transition flex items-center gap-1.5">
+                <i class="fa-solid fa-share-nodes"></i> Share
+            </button>
+            <button onclick="exportWorkflowJSON()" class="text-xs bg-[#1a1d24] hover:bg-[#2a2f3a] border border-[#2a2f3a] px-3 py-1.5 rounded-lg text-slate-300 transition flex items-center gap-1.5" title="Export Workflow JSON">
+                <i class="fa-solid fa-download"></i> Export JSON
+            </button>
+            <div class="flex items-center space-x-2 bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 rounded-full text-xs text-emerald-400">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Active Workflow</span>
+            </div>
+            <button onclick="triggerPublish()" class="bg-[#ff6d5a] hover:bg-[#e55b48] text-white text-xs font-semibold px-4 py-1.5 rounded-lg shadow-md transition flex items-center gap-1.5">
+                Publish <i class="fa-solid fa-chevron-down text-[10px]"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <div class="flex-1 relative overflow-hidden flex" id="main-container">
+        <!-- Canvas Area -->
+        <div id="canvas-wrapper" class="flex-1 relative canvas-grid overflow-hidden cursor-grab active:cursor-grabbing">
+            <svg id="connections-svg" class="absolute inset-0 w-full h-full pointer-events-none z-0">
+                <defs>
+                    <linearGradient id="line-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#ff6d5a" />
+                        <stop offset="100%" stop-color="#9d75ff" />
+                    </linearGradient>
+                </defs>
+            </svg>
+
+            <!-- Nodes Container -->
+            <div id="nodes-container" class="absolute inset-0 z-10 transform origin-top-left transition-transform duration-75"></div>
+
+            <!-- Floating Controls -->
+            <div class="absolute bottom-6 left-6 flex items-center bg-[#111318]/90 backdrop-blur border border-[#2a2f3a] rounded-xl p-1 shadow-2xl z-20 space-x-1">
+                <button onclick="resetZoom()" class="p-2 text-slate-400 hover:text-white hover:bg-[#1a1d24] rounded-lg transition" title="Reset View"><i class="fa-solid fa-expand text-xs"></i></button>
+                <button onclick="zoomIn()" class="p-2 text-slate-400 hover:text-white hover:bg-[#1a1d24] rounded-lg transition" title="Zoom In"><i class="fa-solid fa-plus text-xs"></i></button>
+                <button onclick="zoomOut()" class="p-2 text-slate-400 hover:text-white hover:bg-[#1a1d24] rounded-lg transition" title="Zoom Out"><i class="fa-solid fa-minus text-xs"></i></button>
+                <div class="h-4 w-[1px] bg-[#2a2f3a] mx-1"></div>
+                <button onclick="toggleGrid()" id="grid-toggle-btn" class="p-2 text-emerald-400 hover:bg-[#1a1d24] rounded-lg transition text-xs flex items-center gap-1 font-medium px-2.5">
+                    <i class="fa-solid fa-border-all"></i> Grid
+                </button>
+            </div>
+
+            <!-- Right Vertical Toolbar -->
+            <div class="absolute right-6 top-6 flex flex-col bg-[#111318]/90 backdrop-blur border border-[#2a2f3a] rounded-xl p-1.5 shadow-2xl z-20 space-y-1.5">
+                <button onclick="openAddNodeModal()" class="p-2.5 text-slate-400 hover:text-white hover:bg-[#1a1d24] rounded-lg transition" title="Add Node"><i class="fa-solid fa-plus"></i></button>
+                <button onclick="openSearchModal()" class="p-2.5 text-slate-400 hover:text-white hover:bg-[#1a1d24] rounded-lg transition" title="Search Nodes"><i class="fa-solid fa-magnifying-glass"></i></button>
+                <button onclick="toggleMinimap()" class="p-2.5 text-slate-400 hover:text-white hover:bg-[#1a1d24] rounded-lg transition" title="Minimap"><i class="fa-solid fa-map"></i></button>
+                <button onclick="openDocsModal()" class="p-2.5 text-slate-400 hover:text-white hover:bg-[#1a1d24] rounded-lg transition" title="Workflow Docs"><i class="fa-solid fa-book"></i></button>
+                <button onclick="triggerAICopilot()" class="p-2.5 text-[#ff6d5a] hover:bg-[#ff6d5a]/10 rounded-lg transition" title="AI Copilot"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
+            </div>
+
+            <!-- Execute Workflow CTA -->
+            <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-20">
+                <button onclick="executeWorkflow()" id="execute-btn" class="bg-gradient-to-r from-[#ff6d5a] to-[#ff8c42] hover:from-[#e55b48] hover:to-[#e07b32] text-white font-semibold px-8 py-3 rounded-2xl shadow-2xl flex items-center gap-3 transition transform hover:scale-105 active:scale-95 border border-[#ff8c42]/40">
+                    <i class="fa-solid fa-bolt text-lg animate-bounce"></i>
+                    <span id="execute-btn-text">Execute workflow</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Right Side Configuration Panel -->
+        <div id="side-panel" class="w-96 bg-[#111318] border-l border-[#2a2f3a] flex flex-col z-30 transform translate-x-full transition-transform duration-300 absolute right-0 top-0 bottom-0 shadow-2xl">
+            <div class="h-14 border-b border-[#2a2f3a] flex items-center justify-between px-5 bg-[#161920]">
+                <div class="flex items-center space-x-3">
+                    <div id="panel-node-icon" class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white text-sm">
+                        <i class="fa-solid fa-cube"></i>
+                    </div>
+                    <div>
+                        <h3 id="panel-node-title" class="text-sm font-semibold text-white">Node Configuration</h3>
+                        <span id="panel-node-type" class="text-[10px] text-slate-400">Trigger Node</span>
+                    </div>
+                </div>
+                <button onclick="closeSidePanel()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-[#2a2f3a] transition"><i class="fa-solid fa-xmark text-sm"></i></button>
+            </div>
+
+            <div class="flex border-b border-[#2a2f3a] text-xs font-medium bg-[#13151c]">
+                <button onclick="switchPanelTab('parameters')" id="ptab-parameters" class="flex-1 py-3 text-center text-[#ff6d5a] border-b-2 border-[#ff6d5a] transition">Parameters</button>
+                <button onclick="switchPanelTab('input')" id="ptab-input" class="flex-1 py-3 text-center text-slate-400 hover:text-white transition">Input Data</button>
+                <button onclick="switchPanelTab('output')" id="ptab-output" class="flex-1 py-3 text-center text-slate-400 hover:text-white transition">Output JSON</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-5 space-y-5 text-xs" id="panel-content"></div>
+
+            <div class="p-4 border-t border-[#2a2f3a] bg-[#161920] flex justify-between items-center">
+                <button onclick="testSingleNode()" class="bg-[#1a1d24] hover:bg-[#2a2f3a] border border-[#2a2f3a] text-slate-300 px-4 py-2 rounded-lg transition font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-play text-[10px] text-emerald-400"></i> Test Step
+                </button>
+                <button onclick="saveNodeConfig()" class="bg-[#ff6d5a] hover:bg-[#e55b48] text-white px-4 py-2 rounded-lg transition font-semibold shadow-sm">
+                    Apply Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Execution Logs Drawer -->
+    <div id="logs-container" class="h-44 bg-[#111318] border-t border-[#2a2f3a] flex flex-col z-30 transition-all duration-300 transform translate-y-full shrink-0">
+        <div class="h-10 bg-[#161920] border-b border-[#2a2f3a] flex items-center justify-between px-4 select-none">
+            <div class="flex items-center space-x-3 text-xs font-medium">
+                <span class="flex items-center gap-2 text-emerald-400"><i class="fa-solid fa-terminal"></i> Execution Console & Logs</span>
+                <span id="exec-status-badge" class="bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded text-[10px]">Ready</span>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="clearLogs()" class="text-slate-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-[#2a2f3a] transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+                <button onclick="toggleLogsDrawer()" class="text-slate-400 hover:text-white text-xs p-1.5 rounded hover:bg-[#2a2f3a] transition"><i class="fa-solid fa-chevron-down" id="logs-toggle-icon"></i></button>
+            </div>
+        </div>
+        <div id="logs-content" class="flex-1 p-3 overflow-y-auto font-mono text-[11px] space-y-1.5 text-slate-300">
+            <div class="text-slate-500">[System] n8n AI Lead Generation workflow engine initialized successfully.</div>
+        </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="share-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#161920] border border-[#2a2f3a] rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl">
+            <div class="flex justify-between items-center">
+                <h3 class="text-base font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-share-nodes text-[#ff6d5a]"></i> Share Workflow</h3>
+                <button onclick="toggleShareModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p class="text-xs text-slate-400">Anyone with this link can view and inspect this AI lead generation automation pipeline.</p>
+            <div class="flex items-center space-x-2">
+                <input type="text" readonly value="https://n8n.cloud/workflow/exec-lead-gen-v4" class="flex-1 bg-[#111318] border border-[#2a2f3a] rounded-lg px-3 py-2 text-xs text-slate-300 font-mono outline-none">
+                <button onclick="copyShareLink()" class="bg-[#ff6d5a] hover:bg-[#e55b48] text-white px-4 py-2 rounded-lg text-xs font-semibold transition">Copy</button>
+            </div>
+            <div class="pt-2 flex justify-end">
+                <button onclick="toggleShareModal()" class="bg-[#2a2f3a] hover:bg-[#323846] text-slate-200 px-4 py-2 rounded-lg text-xs font-medium transition">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Node Modal -->
+    <div id="add-node-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#161920] border border-[#2a2f3a] rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl">
+            <div class="flex justify-between items-center">
+                <h3 class="text-base font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-plus text-[#ff6d5a]"></i> Add New Node to Pipeline</h3>
+                <button onclick="closeAddNodeModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3">
+                <label class="text-xs text-slate-300 block">Select Node Category / Type:</label>
+                <select id="new-node-type" class="w-full bg-[#111318] border border-[#2a2f3a] rounded-lg px-3 py-2 text-xs text-slate-200 outline-none">
+                    <option value="Webhook">Webhook Trigger (On Form Submission)</option>
+                    <option value="HTTP Request">HTTP Request (API / Scraping)</option>
+                    <option value="AI Agent">AI Agent / LLM Processing</option>
+                    <option value="If / Switch">Conditional Filter (If/Else)</option>
+                    <option value="Google Sheets">Google Sheets Integration</option>
+                    <option value="Code / Transform">JavaScript Code Transformer</option>
+                </select>
+                <label class="text-xs text-slate-300 block">Node Title:</label>
+                <input type="text" id="new-node-title" placeholder="e.g. Verify CRM Status" class="w-full bg-[#111318] border border-[#2a2f3a] rounded-lg px-3 py-2 text-xs text-slate-200 outline-none">
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeAddNodeModal()" class="bg-[#2a2f3a] hover:bg-[#323846] text-slate-200 px-4 py-2 rounded-lg text-xs font-medium transition">Cancel</button>
+                <button onclick="confirmAddNode()" class="bg-[#ff6d5a] hover:bg-[#e55b48] text-white px-4 py-2 rounded-lg text-xs font-semibold transition">Add Node</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-24 right-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <script>
+        // Full Dataset of all 24 nodes mirroring the exact n8n workflow image
+        let nodesData = [
+            // Row 1: Form & Search Pipeline
+            { id: 'node-1', title: 'On form submission', type: 'Webhook', icon: 'fa-file-lines', color: 'purple', row: 1, col: 1, 
+              desc: 'Triggers when a new lead request is submitted.', input: { leadForm: { company: 'Acme Corp', industry: 'SaaS', targetRegion: 'North America' } }, output: { success: true, submissionId: 'sub_99821' } },
+            { id: 'node-2', title: 'Normalize Research Request', type: 'Edit Fields', icon: 'fa-pen-to-square', color: 'slate', row: 1, col: 2,
+              desc: 'Standardizes search query keywords and region parameters.', input: { query: 'Acme Corp SaaS North America' }, output: { normalizedQuery: 'acme corp enterprise software saas' } },
+            { id: 'node-3', title: 'Validate Research Request', type: 'If / Switch', icon: 'fa-code-branch', color: 'green', row: 1, col: 3,
+              desc: 'Ensures mandatory parameters are present.', input: { query: 'acme corp enterprise software saas' }, output: { isValid: true, error: null } },
+            { id: 'node-4', title: 'Search', type: 'SerpAPI / Google', icon: 'fa-magnifying-glass', color: 'slate', row: 1, col: 4,
+              desc: 'Searches Google for official corporate domain.', input: { query: 'acme corp enterprise software saas' }, output: { totalResults: 14, topUrl: 'https://acmecorp.example.com' } },
+            { id: 'node-5', title: 'Check Search Results', type: 'If / Switch', icon: 'fa-code-branch', color: 'green', row: 1, col: 5,
+              desc: 'Verifies if valid search results returned.', input: { topUrl: 'https://acmecorp.example.com' }, output: { hasResults: true } },
+            { id: 'node-6', title: 'Split Company Results', type: 'Split Out', icon: 'fa-arrows-split-up-and-left', color: 'slate', row: 1, col: 6,
+              desc: 'Unpacks company search results into individual items.', input: { resultsCount: 5 }, output: { currentIndex: 0, url: 'https://acmecorp.example.com' } },
+            { id: 'node-7', title: 'Normalize Company URLs', type: 'Code / Helper', icon: 'fa-code', color: 'yellow', row: 1, col: 7,
+              desc: 'Cleans UTM tags and trailing slashes from URLs.', input: { rawUrl: 'https://acmecorp.example.com/?utm_source=google' }, output: { cleanUrl: 'https://acmecorp.example.com' } },
+            { id: 'node-8', title: 'Keep Valid Company Websites', type: 'Filter', icon: 'fa-filter', color: 'green', row: 1, col: 8,
+              desc: 'Filters out social media profiles and pdf files.', input: { domain: 'acmecorp.example.com' }, output: { passed: true } },
+
+            // Row 2: Scraping & AI Fallback Pipeline
+            { id: 'node-9', title: 'Remove Duplicates', type: 'Deduplicate', icon: 'fa-clone', color: 'slate', row: 2, col: 1,
+              desc: 'Ensures domains are only processed once per batch.', input: { domain: 'acmecorp.example.com' }, output: { isUnique: true } },
+            { id: 'node-10', title: 'Fetch Company Website', type: 'HTTP Request', icon: 'fa-globe', color: 'blue', row: 2, col: 2,
+              desc: 'Scrapes raw HTML content from company landing page.', input: { url: 'https://acmecorp.example.com' }, output: { statusCode: 200, htmlLength: 45200 } },
+            { id: 'node-11', title: 'Extract Website Text', type: 'HTML Extractor', icon: 'fa-file-code', color: 'orange', row: 2, col: 3,
+              desc: 'Extracts body text content from raw HTML.', input: { htmlLength: 45200 }, output: { rawText: 'Welcome to Acme Corp. Enterprise AI solutions...' } },
+            { id: 'node-12', title: 'Clean Website Text', type: 'Code / Text', icon: 'fa-code', color: 'yellow', row: 2, col: 4,
+              desc: 'Removes navigation menus, footers, and scripts.', input: { rawTextLength: 12400 }, output: { cleanedText: 'Acme Corp provides enterprise AI workflow solutions for B2B SaaS...' } },
+            { id: 'node-13', title: 'Check Website Text Quality', type: 'If / Switch', icon: 'fa-code-branch', color: 'green', row: 2, col: 5,
+              desc: 'Checks if text length > 300 words and readable.', input: { wordCount: 840 }, output: { qualityScore: 92, fallbackNeeded: false } },
+            { id: 'node-14', title: 'ScrapeGraphAI Fallback', type: 'AI Scraper API', icon: 'fa-robot', color: 'purple', row: 2, col: 6,
+              desc: 'Fallback intelligent scraper for bot-protected sites.', input: { url: 'https://acmecorp.example.com' }, output: { aiScrapedData: { employees: '50-200', techStack: ['React', 'Python'] } } },
+            { id: 'node-15', title: 'Normalize ScrapeGraphAI Result', type: 'Code / Transform', icon: 'fa-code', color: 'yellow', row: 2, col: 7,
+              desc: 'Standardizes fallback payload format.', input: { rawFallback: true }, output: { normalized: true, companySize: '50-200' } },
+            { id: 'node-16', title: 'Merge Company Records', type: 'Merge Append', icon: 'fa-code-merge', color: 'green', row: 2, col: 8,
+              desc: 'Merges standard scrape and fallback pipelines.', input: { branchA: true, branchB: false }, output: { mergedRecord: { name: 'Acme Corp', domain: 'acmecorp.example.com' } } },
+
+            // Row 3: AI Qualification & Output Pipeline
+            { id: 'node-17', title: 'AI Lead Qualification', type: 'AI Agent / Chain', icon: 'fa-brain', color: 'purple', row: 3, col: 3,
+              desc: 'Evaluates lead against ICP using LLM reasoning.', input: { companyData: 'Acme Corp', icpCriteria: 'B2B SaaS Series A+' }, output: { leadScore: 94, qualificationStatus: 'Highly Qualified' } },
+            { id: 'node-18', title: 'OpenRouter Chat Model', type: 'LLM Provider', icon: 'fa-microchip', color: 'slate', row: 3.5, col: 1.5,
+              desc: 'Connected Model: Claude 3.5 Sonnet / GPT-4o', input: { model: 'anthropic/claude-3.5-sonnet', temperature: 0.2 }, output: { tokenUsage: 842 } },
+            { id: 'node-19', title: 'Structured Output Parser', type: 'JSON Parser', icon: 'fa-code', color: 'yellow', row: 3.5, col: 3,
+              desc: 'Enforces strict JSON schema for lead scoring.', input: { schema: 'LeadScoreSchema' }, output: { parsedJson: { score: 94, tier: 'Tier 1' } } },
+            { id: 'node-20', title: 'Combine Company Data and AI Result', type: 'Code Merge', icon: 'fa-code', color: 'yellow', row: 3, col: 4.5,
+              desc: 'Merges metadata with AI scoring intelligence.', input: { company: 'Acme', aiScore: 94 }, output: { fullLeadProfile: { name: 'Acme Corp', score: 94 } } },
+            { id: 'node-21', title: 'Validate Final Lead Record', type: 'If / Switch', icon: 'fa-code-branch', color: 'green', row: 3, col: 6,
+              desc: 'Checks if lead score >= 70 threshold.', input: { score: 94 }, output: { approved: true } },
+            { id: 'node-22', title: 'Generate Lead Intelligence Report', type: 'Edit Fields', icon: 'fa-file-lines', color: 'slate', row: 2.7, col: 7.5,
+              desc: 'Formats executive summary in Markdown.', input: { profile: 'Acme Corp' }, output: { markdownText: '# Lead Report: Acme Corp\nScore: 94/100...' } },
+            { id: 'node-23', title: 'Create Markdown Report File', type: 'Write Binary', icon: 'fa-file-arrow-down', color: 'blue', row: 2.7, col: 8.8,
+              desc: 'Generates downloadable .md report file.', input: { filename: 'Acme_Report.md' }, output: { fileSaved: true, path: '/reports/Acme_Report.md' } },
+            { id: 'node-24', title: 'Save Leads to Google Sheets', type: 'Google Sheets', icon: 'fa-file-excel', color: 'green', row: 3.6, col: 7.5,
+              desc: 'Appends qualified lead row to Google Sheets database.', input: { spreadsheetId: 'sheet_lead_db_99' }, output: { rowAppended: true, rowId: 142 } }
+        ];
+
+        let connectionsData = [
+            { from: 'node-1', to: 'node-2' },
+            { from: 'node-2', to: 'node-3' },
+            { from: 'node-3', to: 'node-4' },
+            { from: 'node-4', to: 'node-5' },
+            { from: 'node-5', to: 'node-6' },
+            { from: 'node-6', to: 'node-7' },
+            { from: 'node-7', to: 'node-8' },
+            { from: 'node-8', to: 'node-9' },
+            { from: 'node-9', to: 'node-10' },
+            { from: 'node-10', to: 'node-11' },
+            { from: 'node-11', to: 'node-12' },
+            { from: 'node-12', to: 'node-13' },
+            { from: 'node-13', to: 'node-14', label: 'Fallback' },
+            { from: 'node-14', to: 'node-15' },
+            { from: 'node-13', to: 'node-16', label: 'True' },
+            { from: 'node-15', to: 'node-16' },
+            { from: 'node-16', to: 'node-17' },
+            { from: 'node-18', to: 'node-17', type: 'model' },
+            { from: 'node-19', to: 'node-17', type: 'parser' },
+            { from: 'node-17', to: 'node-20' },
+            { from: 'node-20', to: 'node-21' },
+            { from: 'node-21', to: 'node-22', label: 'True' },
+            { from: 'node-22', to: 'node-23' },
+            { from: 'node-21', to: 'node-24', label: 'True' }
+        ];
+
+        let selectedNodeId = null;
+        let isLogsOpen = false;
+        let scale = 1;
+        let panX = 0;
+        let panY = 0;
+        let isDraggingCanvas = false;
+        let startX = 0;
+        let startY = 0;
+        let gridVisible = true;
+
+        window.onload = function() {
+            renderNodes();
+            renderConnections();
+            setupCanvasPanZoom();
+            logMessage('[System] Workflow loaded successfully. 24 active nodes initialized.');
+        };
+
+        function renderNodes() {
+            const container = document.getElementById('nodes-container');
+            container.innerHTML = '';
+
+            nodesData.forEach(node => {
+                const left = 60 + (node.col - 1) * 190;
+                const top = 60 + (node.row - 1) * 170;
+
+                const nodeEl = document.createElement('div');
+                nodeEl.id = node.id;
+                nodeEl.className = `absolute bg-[#1a1d24] border border-[#2a2f3a] hover:border-[#ff6d5a] rounded-xl p-3 w-40 shadow-xl cursor-pointer transition-all duration-150 flex flex-col items-center text-center group select-none`;
+                nodeEl.style.left = `${left}px`;
+                nodeEl.style.top = `${top}px`;
+                nodeEl.onclick = (e) => { e.stopPropagation(); openNodePanel(node.id); };
+
+                let iconBg = 'bg-slate-800 text-slate-300';
+                if (node.color === 'purple') iconBg = 'bg-purple-950 text-purple-400 border border-purple-800/50';
+                else if (node.color === 'green') iconBg = 'bg-emerald-950 text-emerald-400 border border-emerald-800/50';
+                else if (node.color === 'orange') iconBg = 'bg-orange-950 text-orange-400 border border-orange-800/50';
+                else if (node.color === 'blue') iconBg = 'bg-blue-950 text-blue-400 border border-blue-800/50';
+                else if (node.color === 'yellow') iconBg = 'bg-amber-950 text-amber-400 border border-amber-800/50';
+
+                nodeEl.innerHTML = `
+                    <div class="w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center text-base mb-2 shadow-inner group-hover:scale-110 transition-transform">
+                        <i class="fa-solid ${node.icon}"></i>
+                    </div>
+                    <h4 class="text-[11px] font-semibold text-slate-200 leading-tight mb-1 line-clamp-2">${node.title}</h4>
+                    <span class="text-[9px] text-slate-400 bg-[#111318] px-2 py-0.5 rounded-md border border-[#2a2f3a]">${node.type}</span>
+                `;
+                container.appendChild(nodeEl);
+            });
+        }
+
+        function renderConnections() {
+            const svg = document.getElementById('connections-svg');
+            const defs = svg.querySelector('defs');
+            svg.innerHTML = '';
+            if (defs) svg.appendChild(defs);
+
+            connectionsData.forEach(conn => {
+                const fromNode = nodesData.find(n => n.id === conn.from);
+                const toNode = nodesData.find(n => n.id === conn.to);
+                if (!fromNode || !toNode) return;
+
+                const x1 = 60 + (fromNode.col - 1) * 190 + 80;
+                const y1 = 60 + (fromNode.row - 1) * 170 + 55;
+                const x2 = 60 + (toNode.col - 1) * 190 + 80;
+                const y2 = 60 + (toNode.row - 1) * 170 + 55;
+
+                const dx = Math.abs(x2 - x1) * 0.5;
+                const pathData = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathData);
+                path.setAttribute('fill', 'none');
+                path.setAttribute('stroke', conn.type === 'model' || conn.type === 'parser' ? '#9d75ff' : '#2a2f3a');
+                path.setAttribute('stroke-width', '2.5');
+                path.setAttribute('class', 'transition-all duration-300 hover:stroke-[#ff6d5a]');
+                svg.appendChild(path);
+
+                if (conn.label) {
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', (x1 + x2) / 2);
+                    text.setAttribute('y', (y1 + y2) / 2 - 8);
+                    text.setAttribute('fill', '#94a3b8');
+                    text.setAttribute('font-size', '9px');
+                    text.setAttribute('text-anchor', 'middle');
+                    text.textContent = conn.label;
+                    svg.appendChild(text);
+                }
+            });
+        }
+
+        function setupCanvasPanZoom() {
+            const wrapper = document.getElementById('canvas-wrapper');
+
+            wrapper.onmousedown = (e) => {
+                if (e.target.id === 'canvas-wrapper' || e.target.tagName === 'svg' || e.target.tagName === 'path') {
+                    isDraggingCanvas = true;
+                    startX = e.clientX - panX;
+                    startY = e.clientY - panY;
+                    wrapper.style.cursor = 'grabbing';
+                }
+            };
+
+            window.onmousemove = (e) => {
+                if (!isDraggingCanvas) return;
+                panX = e.clientX - startX;
+                panY = e.clientY - startY;
+                updateTransform();
+            };
+
+            window.onmouseup = () => {
+                isDraggingCanvas = false;
+                wrapper.style.cursor = 'grab';
+            };
+
+            wrapper.onwheel = (e) => {
+                e.preventDefault();
+                const zoomFactor = 1.1;
+                if (e.deltaY < 0) {
+                    scale = Math.min(scale * zoomFactor, 1.8);
+                } else {
+                    scale = Math.max(scale / zoomFactor, 0.5);
+                }
+                updateTransform();
+            };
+        }
+
+        function updateTransform() {
+            const container = document.getElementById('nodes-container');
+            const svg = document.getElementById('connections-svg');
+            const transformStr = `translate(${panX}px, ${panY}px) scale(${scale})`;
+            container.style.transform = transformStr;
+            svg.style.transform = transformStr;
+        }
+
+        function resetZoom() {
+            scale = 1;
+            panX = 0;
+            panY = 0;
+            updateTransform();
+            showToast('Canvas view reset', 'info');
+        }
+
+        function zoomIn() {
+            scale = Math.min(scale * 1.15, 1.8);
+            updateTransform();
+        }
+
+        function zoomOut() {
+            scale = Math.max(scale / 1.15, 0.5);
+            updateTransform();
+        }
+
+        function toggleGrid() {
+            gridVisible = !gridVisible;
+            const wrapper = document.getElementById('canvas-wrapper');
+            const btn = document.getElementById('grid-toggle-btn');
+            if (gridVisible) {
+                wrapper.classList.add('canvas-grid');
+                btn.className = 'p-2 text-emerald-400 hover:bg-[#1a1d24] rounded-lg transition text-xs flex items-center gap-1 font-medium px-2.5';
+            } else {
+                wrapper.classList.remove('canvas-grid');
+                btn.className = 'p-2 text-slate-500 hover:bg-[#1a1d24] rounded-lg transition text-xs flex items-center gap-1 font-medium px-2.5';
+            }
+        }
+
+        function openNodePanel(nodeId) {
+            selectedNodeId = nodeId;
+            const node = nodesData.find(n => n.id === nodeId);
+            if (!node) return;
+
+            document.getElementById('panel-node-title').textContent = node.title;
+            document.getElementById('panel-node-type').textContent = node.type;
+            
+            const panel = document.getElementById('side-panel');
+            panel.classList.remove('translate-x-full');
+
+            renderPanelContent('parameters');
+        }
+
+        function closeSidePanel() {
+            const panel = document.getElementById('side-panel');
+            panel.classList.add('translate-x-full');
+            selectedNodeId = null;
+        }
+
+        function switchPanelTab(tab) {
+            ['parameters', 'input', 'output'].forEach(t => {
+                const btn = document.getElementById(`ptab-${t}`);
+                if (t === tab) {
+                    btn.className = 'flex-1 py-3 text-center text-[#ff6d5a] border-b-2 border-[#ff6d5a] transition font-medium';
+                } else {
+                    btn.className = 'flex-1 py-3 text-center text-slate-400 hover:text-white transition';
+                }
+            });
+            renderPanelContent(tab);
+        }
+
+        function renderPanelContent(tab) {
+            const node = nodesData.find(n => n.id === selectedNodeId);
+            if (!node) return;
+            const container = document.getElementById('panel-content');
+
+            if (tab === 'parameters') {
+                container.innerHTML = `
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-[11px] font-semibold text-slate-300 block mb-1">Node Display Name</label>
+                            <input type="text" id="edit-node-title" value="${node.title}" class="w-full bg-[#161920] border border-[#2a2f3a] rounded-lg px-3 py-2 text-slate-200 text-xs outline-none focus:border-[#ff6d5a]">
+                        </div>
+                        <div>
+                            <label class="text-[11px] font-semibold text-slate-300 block mb-1">Description / Notes</label>
+                            <textarea id="edit-node-desc" rows="3" class="w-full bg-[#161920] border border-[#2a2f3a] rounded-lg p-3 text-slate-200 text-xs outline-none focus:border-[#ff6d5a]">${node.desc}</textarea>
+                        </div>
+                        <div>
+                            <label class="text-[11px] font-semibold text-slate-300 block mb-1">Execution Timeout (seconds)</label>
+                            <input type="number" value="30" class="w-full bg-[#161920] border border-[#2a2f3a] rounded-lg px-3 py-2 text-slate-200 text-xs outline-none">
+                        </div>
+                        <div class="pt-2 flex items-center justify-between">
+                            <span class="text-slate-300">Retry On Failure</span>
+                            <input type="checkbox" checked class="accent-[#ff6d5a] w-4 h-4">
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'input') {
+                container.innerHTML = `
+                    <div class="space-y-2">
+                        <span class="text-slate-400 text-[10px]">JSON Payload Received from Upstream Node:</span>
+                        <pre class="bg-[#161920] border border-[#2a2f3a] p-3 rounded-lg text-emerald-400 font-mono text-[11px] overflow-x-auto">${JSON.stringify(node.input, null, 2)}</pre>
+                    </div>
+                `;
+            } else if (tab === 'output') {
+                container.innerHTML = `
+                    <div class="space-y-2">
+                        <span class="text-slate-400 text-[10px]">Mock Execution Output JSON:</span>
+                        <pre class="bg-[#161920] border border-[#2a2f3a] p-3 rounded-lg text-purple-300 font-mono text-[11px] overflow-x-auto">${JSON.stringify(node.output, null, 2)}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        function saveNodeConfig() {
+            const node = nodesData.find(n => n.id === selectedNodeId);
+            if (node) {
+                const newTitle = document.getElementById('edit-node-title').value;
+                const newDesc = document.getElementById('edit-node-desc').value;
+                if (newTitle) node.title = newTitle;
+                if (newDesc) node.desc = newDesc;
+                renderNodes();
+                showToast('Node parameters updated successfully', 'success');
+            }
+            closeSidePanel();
+        }
+
+        function testSingleNode() {
+            const node = nodesData.find(n => n.id === selectedNodeId);
+            if (!node) return;
+            showToast(`Testing single step: ${node.title}...`, 'info');
+            logMessage(`[Test Step] Executed node: "${node.title}" (${node.type}). Result: Success.`);
+            if (!isLogsOpen) toggleLogsDrawer();
+        }
+
+        let isExecuting = false;
+        async function executeWorkflow() {
+            if (isExecuting) return;
+            isExecuting = true;
+
+            const btnText = document.getElementById('execute-btn-text');
+            btnText.textContent = 'Executing workflow...';
+            
+            if (!isLogsOpen) toggleLogsDrawer();
+
+            document.getElementById('exec-status-badge').className = 'bg-amber-950 text-amber-400 border border-amber-800 px-2 py-0.5 rounded text-[10px] animate-pulse';
+            document.getElementById('exec-status-badge').textContent = 'Running...';
+
+            logMessage('--------------------------------------------------');
+            logMessage('[Workflow] Started execution run #exec_8841a');
+
+            for (let i = 0; i < nodesData.length; i++) {
+                const node = nodesData[i];
+                const el = document.getElementById(node.id);
+                if (el) el.classList.add('executing-node');
+
+                logMessage(`[Node Execution] Running: "${node.title}" (${node.type})...`);
+                await new Promise(r => setTimeout(r, 200));
+
+                if (el) el.classList.remove('executing-node');
+            }
+
+            logMessage('[Workflow] Execution completed successfully in 4.82s. 24 records processed.');
+            document.getElementById('exec-status-badge').className = 'bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded text-[10px]';
+            document.getElementById('exec-status-badge').textContent = 'Success (200)';
+            btnText.textContent = 'Execute workflow';
+            isExecuting = false;
+
+            showToast('Workflow executed successfully!', 'success');
+        }
+
+        function toggleLogsDrawer() {
+            const drawer = document.getElementById('logs-container');
+            const icon = document.getElementById('logs-toggle-icon');
+            isLogsOpen = !isLogsOpen;
+            if (isLogsOpen) {
+                drawer.classList.remove('translate-y-full');
+                icon.className = 'fa-solid fa-chevron-up';
+            } else {
+                drawer.classList.add('translate-y-full');
+                icon.className = 'fa-solid fa-chevron-down';
+            }
+        }
+
+        function logMessage(msg) {
+            const content = document.getElementById('logs-content');
+            const div = document.createElement('div');
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            content.appendChild(div);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logs-content').innerHTML = '';
+            logMessage('[System] Logs cleared.');
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            let icon = 'fa-circle-info text-blue-400';
+            if (type === 'success') icon = 'fa-circle-check text-emerald-400';
+            else if (type === 'error') icon = 'fa-circle-exclamation text-rose-400';
+
+            toast.className = `pointer-events-auto flex items-center space-x-3 px-4 py-3 rounded-xl border bg-[#1a1d24] border-[#2a2f3a] text-slate-200 shadow-2xl text-xs font-medium animate-bounce`;
+            toast.innerHTML = `<i class="fa-solid ${icon} text-base"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function switchTab(tab) {
+            ['editor', 'executions', 'evaluations'].forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                if (t === tab) {
+                    btn.className = 'px-4 py-1.5 rounded-md bg-[#2a2f3a] text-white transition shadow-sm';
+                } else {
+                    btn.className = 'px-4 py-1.5 rounded-md text-slate-400 hover:text-white transition';
+                }
+            });
+            if (tab !== 'editor') {
+                showToast(`Switched to ${tab.charAt(0).toUpperCase() + tab.slice(1)} view`, 'info');
+            }
+        }
+
+        function toggleShareModal() {
+            const modal = document.getElementById('share-modal');
+            modal.classList.toggle('hidden');
+        }
+
+        function copyShareLink() {
+            const linkInput = document.querySelector('#share-modal input');
+            const range = document.createRange();
+            range.selectNode(linkInput);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            document.execCommand('copy');
+            showToast('Share link copied to clipboard!', 'success');
+            toggleShareModal();
+        }
+
+        function exportWorkflowJSON() {
+            const workflowData = {
+                name: "AI Lead Generation",
+                active: true,
+                nodes: nodesData,
+                connections: connectionsData
+            };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(workflowData, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "ai_lead_generation_workflow.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast('Workflow JSON exported successfully!', 'success');
+        }
+
+        function triggerPublish() {
+            showToast('Workflow published live successfully!', 'success');
+        }
+
+        function openAddNodeModal() {
+            document.getElementById('add-node-modal').classList.remove('hidden');
+        }
+
+        function closeAddNodeModal() {
+            document.getElementById('add-node-modal').classList.add('hidden');
+        }
+
+        function confirmAddNode() {
+            const type = document.getElementById('new-node-type').value;
+            const title = document.getElementById('new-node-title').value || 'Custom Step';
+            const newNodeId = `node-${nodesData.length + 1}`;
+            
+            nodesData.push({
+                id: newNodeId,
+                title: title,
+                type: type,
+                icon: 'fa-gears',
+                color: 'blue',
+                row: 3,
+                col: 8,
+                desc: 'User added custom workflow step.',
+                input: { sampleInput: true },
+                output: { sampleOutput: true }
+            });
+
+            renderNodes();
+            renderConnections();
+            closeAddNodeModal();
+            showToast(`Node "${title}" added to pipeline!`, 'success');
+        }
+
+        function openSearchModal() {
+            showToast('Node search palette opened', 'info');
+        }
+
+        function toggleMinimap() {
+            showToast('Minimap preview toggled', 'info');
+        }
+
+        function openDocsModal() {
+            showToast('Opening workflow documentation notes', 'info');
+        }
+
+        function triggerAICopilot() {
+            showToast('AI Copilot Assistant ready to generate steps', 'success');
+        }
+
+        function openRenameModal() {
+            showToast('Workflow settings: AI Lead Generation v4.2', 'info');
+        }
+    </script>
+</body>
+</html>
